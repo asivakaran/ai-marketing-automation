@@ -1,0 +1,9 @@
+# Safety net (web/.gitignore also applies) — these must NEVER be pushed:
+# .env = your keys/secrets, dev.db = client data, node_modules = huge junk
+.env
+node_modules/
+.next/
+dev.db
+dev.db-journal
+*.log
+.DS_Store

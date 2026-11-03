@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn>=0.32
+celery>=5.4
+redis>=5.2
+httpx>=0.28
+python-dotenv>=1.0
+# roadmap integrations (uncomment as you build Features 5-11)
+# twilio>=9
+# openai>=1.60
+# anthropic>=0.42

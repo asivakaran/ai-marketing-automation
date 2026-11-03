@@ -1,0 +1,421 @@
+// AutoPilot Marketing OS — Prisma schema
+// Local dev: SQLite (file:./dev.db). Production: Neon Postgres (see web/DEPLOY.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------- Enums ----------------
+
+enum Plan {
+  FREE
+  STARTER
+  GROWTH
+  SCALE
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+enum LeadSource {
+  WEBSITE_CHAT // captured by the embedded chat widget
+  WEBSITE
+  SMS
+  INSTAGRAM
+  FACEBOOK
+  GOOGLE
+  REFERRAL
+  MANUAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  BOOKED
+  CLOSED_WON
+  CLOSED_LOST
+  ARCHIVED
+}
+
+enum LeadUrgency {
+  NORMAL
+  HIGH
+  EMERGENCY
+}
+
+enum ConversationChannel {
+  WEBSITE
+  SMS
+  INSTAGRAM
+  FACEBOOK
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum CampaignType {
+  EMAIL
+  SMS
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  PAUSED
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+}
+
+enum ReviewPlatform {
+  GOOGLE
+  FACEBOOK
+}
+
+enum ReviewStatus {
+  NEW
+  DRAFTED
+  RESPONDED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum IntegrationProvider {
+  TWILIO
+  SMTP // generic email (nodemailer) — used for lead alert emails
+  GOOGLE
+  META
+  GHL
+  STRIPE
+  SENDGRID
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+// ---------------- Models ----------------
+
+model Tenant {
+  id         String   @id // e.g. CLINK_apex — also used in widget URLs /widget/CLINK_apex
+  name       String
+  slug       String   @unique
+  brandColor String   @default("#1e293b")
+  logoUrl    String?
+  website    String?
+  phone      String?
+  email      String?
+  address    String?
+  plan       Plan     @default(FREE)
+  isActive   Boolean  @default(true)
+  // Average job value in whole £ — drives the "estimated pipeline" figure on
+  // the dashboard (booked jobs x avg value). Tuned per trade in Settings.
+  avgJobValue Int     @default(4800)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users         User[]
+  leads         Lead[]
+  conversations Conversation[]
+  messages      Message[]
+  campaigns     Campaign[]
+  campaignRecipients CampaignRecipient[]
+  reviews       Review[]
+  appointments  Appointment[]
+  integrations  Integration[]
+  subscription  Subscription[]
+  webhookEvents WebhookEvent[]
+  auditLogs     AuditLog[]
+  alerts        AlertLog[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String    @unique
+  passwordHash String
+  name         String?
+  role         UserRole  @default(OWNER)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  auditLogs AuditLog[]
+
+  @@index([tenantId])
+}
+
+model Lead {
+  id            String      @id @default(cuid())
+  tenantId      String
+  name          String?
+  email         String?
+  phone         String? // stored normalized: +447700900123
+  source        LeadSource  @default(MANUAL)
+  status        LeadStatus  @default(NEW)
+  serviceNeeded String?
+  postcode      String?
+  urgency       LeadUrgency @default(NORMAL)
+  value         Float?
+  notes         String?
+  lastMessageAt DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  appointments Appointment[]
+  reviews      Review[]
+  recipients   CampaignRecipient[]
+  alerts       AlertLog[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([phone])
+}
+
+model Conversation {
+  id            String              @id @default(cuid())
+  tenantId      String
+  leadId        String?
+  channel       ConversationChannel @default(WEBSITE)
+  status        ConversationStatus   @default(OPEN)
+  lastMessageAt DateTime            @default(now())
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([tenantId, lastMessageAt])
+  @@index([leadId])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  tenantId       String
+  conversationId String
+  role           MessageRole
+  content        String
+  meta           Json? // intents + extracted fields, kept for audit
+  sentAt         DateTime    @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, sentAt])
+}
+
+model Campaign {
+  id             String         @id @default(cuid())
+  tenantId       String
+  name           String
+  type           CampaignType   @default(EMAIL)
+  status         CampaignStatus @default(DRAFT)
+  subject        String?
+  body           String?
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int            @default(0)
+  openCount      Int            @default(0)
+  clickCount     Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipients CampaignRecipient[]
+
+  @@index([tenantId, status])
+}
+
+model CampaignRecipient {
+  id         String          @id @default(cuid())
+  tenantId   String
+  campaignId String
+  leadId     String?
+  email      String?
+  phone      String?
+  status     RecipientStatus @default(PENDING)
+  sentAt     DateTime?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId])
+}
+
+model Review {
+  id             String         @id @default(cuid())
+  tenantId       String
+  leadId         String?
+  platform       ReviewPlatform @default(GOOGLE)
+  authorName     String
+  rating         Int
+  content        String
+  googleReviewId String?
+  googleUrl      String?
+  status         ReviewStatus   @default(NEW)
+  draftResponse  String?
+  response       String?
+  respondedAt    DateTime?
+  reviewedAt     DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  tenantId        String
+  leadId          String?
+  title           String?
+  startsAt        DateTime
+  endsAt          DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  notes           String?
+  calendarEventId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead?  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, startsAt])
+}
+
+model Integration {
+  id        String              @id @default(cuid())
+  tenantId  String
+  provider  IntegrationProvider
+  status    IntegrationStatus   @default(DISCONNECTED)
+  metadata  Json? // e.g. TWILIO: { "alertPhone": "+447700900000" }
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  tenantId        String
+  plan            Plan               @default(STARTER)
+  status          SubscriptionStatus @default(ACTIVE)
+  setupFeePaid    Boolean            @default(false)
+  setupFeeAmount  Float              @default(0)
+  monthlyPrice    Float              @default(0)
+  startedAt       DateTime?
+  currentPeriodEnd DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model WebhookEvent {
+  id          String        @id @default(cuid())
+  tenantId    String?
+  source      String // twilio | stripe | meta | ghl | sendgrid
+  eventId     String?
+  eventType   String?
+  payload     Json
+  status      WebhookStatus @default(RECEIVED)
+  error       String?
+  receivedAt  DateTime      @default(now())
+  processedAt DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([source, receivedAt])
+}
+
+// Every lead-alert attempt (email + SMS), with its REAL outcome.
+// SENT    = actually delivered through SMTP / Twilio
+// MOCK    = logged on the server only — nothing was sent (env keys blank)
+// FAILED  = tried to send, got an error back
+// SKIPPED = channel not configured (e.g. no alert email saved in Settings)
+model AlertLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  leadId    String?
+  channel   String // "EMAIL" | "SMS"
+  reason    String // "NEW_LEAD" | "URGENT" | "READY_TO_BOOK" | "TEST"
+  status    String // "SENT" | "MOCK" | "FAILED" | "SKIPPED"
+  toAddress String
+  error     String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String?
+  action    String // e.g. auth.login, lead.status_changed
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+}

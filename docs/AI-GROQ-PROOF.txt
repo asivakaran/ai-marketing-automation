@@ -1,0 +1,33 @@
+AI LIVE-PATH PROOF — 26 Oct 2026 (sandbox E2E, code identical to this zip)
+=========================================================================
+Method: a local OpenAI-compatible server stood in for Groq's endpoint
+(https://api.groq.com/openai/v1). The app was built in production mode and
+driven through the real /api/chat API with GROQ_API_KEY set. This proves the
+exact code path a real Groq key activates — the only difference is the URL.
+
+TEST 1 — Live provider answers (json mode)
+  Sent:    "Hi I am Dave, my gutters are blocked and water is coming through
+            the ceiling. My number is 07700900222. I am in HP13."
+  Provider received: model=test-model-123, response_format=json_object
+  Reply came FROM THE PROVIDER, parsed from a markdown-fenced JSON body.
+  PASS
+
+TEST 2 — Provider dies mid-flight -> never dark
+  Provider killed; same chat asked a new question.
+  Server log: "[ai] groq call failed — falling back to mock. Error: Connection error."
+  Widget still answered instantly with the built-in emergency script.
+  PASS
+
+TEST 3 — Lead captured end-to-end through the live path
+  Lead row created: name=Dave  phone=+447700900222 (UK-normalised)
+                    service=Guttering  postcode=HP13  urgency=EMERGENCY
+  Linked AlertLog attempts: EMAIL URGENT + SMS URGENT (MOCK status = no SMTP
+  configured in the test env; with SMTP set per EMAIL-SETUP.md these SEND).
+  PASS
+
+FREE-TIER FACTS (checked Oct 2026, console.groq.com/docs/rate-limits)
+  Free plan, no credit card: 30 req/min, 1,000 req/day, 200K tokens/day
+  Default model in this build: openai/gpt-oss-120b
+  (Older Llama models left Groq's free tier in Aug 2026.)
+  A pilot needs a handful of chats/day — the cap is unreachable, and if it
+  ever IS hit, TEST 2 is what the visitor sees: built-in scripts, never silence.

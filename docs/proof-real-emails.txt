@@ -1,0 +1,18 @@
+PROOF: real lead-alert emails, captured from a live SMTP transaction (21 Oct 2026)
+Test: visitor types 'my gutters are blocked... my number is 07xxx' on the website widget.
+Result: these emails arrived over SMTP within seconds. No mock, no log line - a real send.
+
+---------- EMAIL 1 ----------
+From: AutoPilot Alerts <alerts@autopilot.test>
+To: dave@apexroofing.com
+Subject: 🔔 New lead: Guttering — Dave — +447700913580
+
+A visitor just left their number on your website.
+
+Name: Dave
+Phone: +447700913580
+Service: Guttering
+Enquiry: "Hi, my gutters are blocked and overflowing, my name is Dave and my number is 07700913580"
+
+Open the dashboard to claim it:
+https://preview-chat-6b3d3398-07d3-438b-b5d3-ebad166de0ad.space-z.ai/leads
