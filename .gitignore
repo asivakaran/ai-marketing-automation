@@ -7,3 +7,4 @@ dev.db
 dev.db-journal
 *.log
 .DS_Store
+*.tsbuildinfo

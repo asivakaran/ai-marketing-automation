@@ -54,7 +54,7 @@ docs) → Create. **Do NOT tick "Add a README"** — an empty repo is what we wa
 Then, one line at a time (each is explained — paste, Enter, read the output):
 
 ```bash
-cd /d D:\ai-marketing-automation     :: go to the project folder
+pushd D:\ai-marketing-automation     :: go to the project folder
 
 git init                              :: start the repo (safe to repeat)
 
@@ -86,12 +86,43 @@ with nothing of yours in it yet.
 
 ## 1. Database — Neon Postgres (free tier)
 
-1. Sign up at [neon.tech](https://neon.tech) → **New Project** → name it `autopilot` → region: **AWS London (eu-west-2)** (closest to UK users).
-2. Copy the **pooled connection string** from the dashboard:
-   `postgresql://user:pass@ep-xxx-pooler.eu-west-2.aws.neon.tech/autopilot?sslmode=require`
-3. Keep it safe — this becomes `DATABASE_URL`.
+**Plain English:** the database is where all the leads and chats are stored.
+Neon is a company that runs one for you in the cloud, free at this size — you
+never install anything, you just get a web address for it. That address is
+called the **connection string** and becomes `DATABASE_URL`.
 
-> Local dev uses SQLite (`file:./dev.db`). Production switches to Postgres in **step 3b** — it is a one-line schema change plus a migrate.
+1. Go to [neon.tech](https://neon.tech) → **Sign up** (Google login is fine, free — no card).
+2. It creates your first project straight away (or click **New Project**):
+   name it `autopilot`, region **AWS London (eu-west-2)**.
+3. Click **Connect** in the left sidebar. A popup ("Connect to your branch")
+   appears with a box showing a string starting `postgresql://...` — click
+   **Copy**. It looks like:
+   `postgresql://user:pass@ep-xxx-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   The **-pooler** part in the middle = you have the pooled one. Right one.
+   (No `-pooler`? Flip the "Connection pooling" toggle ON in that popup.)
+4. Paste it into Notepad for a moment. This is your `DATABASE_URL`. It contains
+   a password — don't put it in texts or screenshots.
+   Newer Neon strings end with `&channel_binding=require` — that's fine,
+   Prisma accepts it; leave it exactly as copied.
+
+> Local dev uses SQLite (`file:./dev.db`). Production switches to Postgres in **step 3b** — it is a one-line schema change plus a push from your laptop.
+
+> **Windows note — which terminal do you have?** Look at the prompt (the text
+> before your cursor). `PS D:\...>` means **PowerShell** (newer — the `&`
+> character is reserved there and breaks unquoted strings); `D:\...>` or
+> `C:\...>` means **Command Prompt**. This guide avoids terminal-specific
+> syntax entirely: the database address lives in your `.env` file (step 3b),
+> and every command — `db push`, `db:seed`, `new-client` — reads it from
+> there. Identical in both terminals.
+>
+> **Pasted the connection string somewhere unsafe** (a chat window, an email,
+> a screenshot)? It contains your database password — reset it:
+> Neon Console → your project → **Roles** in the sidebar (under "Postgres
+> database") → open the **⋯** menu on the `neondb_owner` row → **Reset
+> password** → confirm. Then click **Connect** → copy the fresh string.
+> Do this straight away — while nothing else is configured yet, nothing needs
+> re-updating. (After Vercel is set up, a reset also means updating the
+> `DATABASE_URL` variable there.)
 
 ---
 
@@ -124,28 +155,52 @@ datasource db {
 }
 ```
 
-Commit + push — Vercel rebuilds. Then run the migration **once** from your laptop, pointing at Neon:
+Now point the app at the cloud database — by editing your settings file, not
+with command-line tricks (those differ between PowerShell and Command Prompt;
+a file behaves the same everywhere):
 
-```bash
-cd web
-DATABASE_URL="postgresql://…your-neon-string…?sslmode=require" npx prisma migrate deploy
-# or, for a brand-new database:
-DATABASE_URL="postgresql://…" npx prisma db push
-```
+1. Notepad → `D:\ai-marketing-automation\web\.env` (the same file you edited
+   for email settings).
+2. Find the line starting `DATABASE_URL=` and replace that ONE line with your
+   Neon string, pasted raw — no quotes, and the `&` is fine inside a file.
+   Leave every other line untouched:
+   `DATABASE_URL=postgresql://neondb_owner:PASS@ep-xxx-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   (Verified: Prisma accepts the string exactly as Neon copies it — including
+   `&channel_binding=require`. Nothing to strip.)
+3. Commit + push the schema change — Vercel rebuilds.
+4. Still in `web\`, create the tables in the cloud database, once:
 
-Seed it (first deploy only — this creates the demo tenant; skip it for a clean customer install):
+   ```bat
+   pushd D:\ai-marketing-automation\web
+   npx prisma db push
+   ```
 
-```bash
-DATABASE_URL="postgresql://…" npm run db:seed
-```
+   Success looks like: `Your database is now in sync with your Prisma schema`.
+
+5. Load the demo data — **first deploy only**. The seed WIPES the database and
+   reloads the demo tenant; once real leads exist, never run it again:
+
+   ```bat
+   npm run db:seed
+   ```
+
+   Success looks like: a line about seeding Apex Roofing + "Done". Verify in
+   Neon → Tables: you'll see Tenant, Lead, User, AlertLog….
+
+> **Why this way:** every command (`db push`, `db:seed`, `new-client`) AND your
+> laptop's `npm run dev` read the same `.env` — so the laptop and the hosted
+> site share one live database (what you see is what prospects see), and
+> nothing breaks the morning after. Your old local data stays safe in the old
+> `dev.db` file (flip the `DATABASE_URL` line back to switch). `.env` is
+> git-ignored: the string and its password never reach GitHub.
 
 ### Adding each new client (one command)
 
-When a client says yes, create their tenant **in the production database** from your laptop:
+When a client says yes, create their tenant **in the production database** from your laptop — just run NEW-CLIENT.bat as before (it reads the same `.env`, so it now writes to the cloud database automatically):
 
-```bash
-cd web
-DATABASE_URL="postgresql://…your-neon-string…?sslmode=require" npm run new-client -- "WD Roofing" "info@wdroofing.org"
+```bat
+pushd D:\ai-marketing-automation\web
+npx tsx prisma/new-client.ts "WD Roofing" "info@wdroofing.org"
 ```
 
 It prints their tenant ID (e.g. `CLINK_wdroofing`), their dashboard login, and the exact widget line to paste on their website — using `NEXT_PUBLIC_APP_URL` if set, so the URL is correct for production. Give them the login details by phone or in person (never in a group chat), and have them change the password in Settings.
@@ -159,8 +214,8 @@ Set these in Vercel → Settings → Environment Variables (all environments):
 | Variable | Value | Notes |
 |---|---|---|
 | `DATABASE_URL` | Neon pooled connection string | from step 1, keep `?sslmode=require` |
-| `JWT_SECRET` | random 32+ chars | `openssl rand -hex 32` |
-| `ENCRYPTION_KEY` | random 32+ chars | `openssl rand -hex 32` |
+| `JWT_SECRET` | random 32+ chars | Windows has no `openssl`. Easiest: copy the value from your laptop's `web\.env` (already set up). Or make a fresh one in PowerShell: `[guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N')` |
+| `ENCRYPTION_KEY` | random 32+ chars | same as above — a different random string |
 | `NEXT_PUBLIC_APP_URL` | `https://app.yourdomain.co.uk` | or your `*.vercel.app` URL to start |
 | `OPENAI_API_KEY` | `sk-…` | blank = mock mode (safe while demoing) |
 | `TWILIO_ACCOUNT_SID` | `AC…` | blank = mock SMS |
@@ -264,3 +319,6 @@ Deploy them on Railway (£5/month) when you get there — not before your first 
 | "Prisma Client did not initialize" | Run `npx prisma generate` (postinstall does this automatically on Vercel) |
 | Inbound SMS returns 403 | Twilio signs the URL it called — make sure `NEXT_PUBLIC_APP_URL` exactly matches the public URL registered in Twilio |
 | Database "already in sync" but tables missing | You're pointing at the old SQLite file — check `DATABASE_URL` |
+| PowerShell: `The ampersand (&) character is not allowed` | You pasted Command Prompt's `set VAR=...` line into PowerShell. This guide no longer uses `set` at all — the database address lives in `.env` (step 3b): no quoting issues, works in both terminals. |
+| `db:seed` fails with `table does not exist` | `db push` went to a different database than the seed did — both must read the same `.env` `DATABASE_URL`. |
+| Build fails: `Failed to type check` + TS error list | Each `error TS...` names its `file(line,col)`. v0.4.1 fixed all shipped type errors (verified clean on TS 5.9.3, the version in the lockfile). Fixed files ship in the zip — extract over your folder, commit, push. |

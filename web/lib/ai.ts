@@ -78,7 +78,7 @@ const PROVIDER_DEFAULTS: Record<"groq" | "openai", { baseUrl: string; model: str
  *  markdown fences or with stray text around it. Returns null if not found. */
 function extractJson(raw: string): Record<string, unknown> | null {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = (fenced ? fenced[1] : raw).trim();
+  const candidate = (fenced?.[1] ?? raw).trim();
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return null;

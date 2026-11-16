@@ -20,7 +20,7 @@ if (existsSync(".env")) {
   for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
     if (line.trim().startsWith("#")) continue;
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!m) continue;
+    if (!m || m[1] === undefined || m[2] === undefined) continue;
     let val = m[2].trim();
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
@@ -38,8 +38,9 @@ const db = new PrismaClient();
 const rawArgs = process.argv.slice(2).map((a) => a.trim()).filter((a) => a !== "");
 let ownerEmail: string | undefined;
 for (let i = rawArgs.length - 1; i >= 0; i--) {
-  if (rawArgs[i].includes("@")) {
-    ownerEmail = rawArgs[i];
+  const a = rawArgs[i];
+  if (a && a.includes("@")) {
+    ownerEmail = a;
     rawArgs.splice(i, 1);
     break;
   }
