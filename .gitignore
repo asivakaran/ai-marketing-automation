@@ -8,3 +8,5 @@ dev.db-journal
 *.log
 .DS_Store
 *.tsbuildinfo
+web/math*.py
+web/math1.txt
