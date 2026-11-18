@@ -10,3 +10,5 @@ dev.db-journal
 *.tsbuildinfo
 web/math*.py
 web/math1.txt
+web/math*.py
+web/math1.txt
